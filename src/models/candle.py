@@ -1,9 +1,9 @@
 class Candle:
     def __init__(
-        self, min: str, 
-        max: str,
-        start: str,
-        close: str
+        self, min: float, 
+        max: float,
+        start: float,
+        close: float
         ):
         
         self.min = min
