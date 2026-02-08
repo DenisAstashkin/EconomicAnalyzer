@@ -23,6 +23,9 @@ def get_TMI(ticker: str) -> str:
 
     response = requests.get(url, params=params)
     
+    if response.status_code != 200:
+        raise Exception(f'[ERROR] Status code is {response.status_code}')
+    
     data = response.json()
     
     data = data['securities']['data']
