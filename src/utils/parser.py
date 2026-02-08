@@ -1,5 +1,5 @@
 import requests
-from src.models import Candle
+from models import Candle
 
 def get_TMI(ticker: str) -> str:
     """ Функция для сопоставления нейминга ценной бумаги с её типом (акция, облигация и тд)
@@ -31,8 +31,8 @@ def get_TMI(ticker: str) -> str:
         raise Exception('[ERROR] Asset type not found')
     
     for i in data:
-        if i[0] != 'null' and i[0] == ticker:
-            return i[12]
+        if i[0] == ticker and i[13] != 'null':
+            return i[13]
     
     raise Exception('[ERROR] Asset type not found')
     
@@ -54,6 +54,9 @@ def get_candles(ticker: str, type_ticker: str, interval: int, start: str, end: s
         list[Candle]: Список свеч
     """
     
+    if type_ticker == 'null':
+        raise Exception('[ERROR] Type_ticker is not defined')
+    
     url = f'https://iss.moex.com/iss/engines/stock/markets/{type_ticker}/securities/{ticker}/candles.json'
 
     params = {
@@ -63,6 +66,10 @@ def get_candles(ticker: str, type_ticker: str, interval: int, start: str, end: s
     }
     
     response = requests.get(url, params=params)
+    
+    if response.status_code != 200:
+        raise Exception(f'[ERROR] Status code is {response.status_code}')
+    
     data = response.json()
 
     data = data['candles']['data']
