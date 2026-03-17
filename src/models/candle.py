@@ -1,12 +1,17 @@
 class Candle:
     def __init__(
-        self, min: float, 
-        max: float,
-        start: float,
-        close: float
+        self, 
+        low: float, 
+        high: float,
+        open: float,
+        close: float,
+        volume: int,
+        date_time: str
         ):
         
-        self.min = min
-        self.max = max
-        self.start = start
+        self.low = low
+        self.high = high
+        self.open = open
         self.close = close        
+        self.volume = volume
+        self.date_time = date_time
