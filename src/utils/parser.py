@@ -60,31 +60,39 @@ def get_candles(ticker: str, type_ticker: str, interval: int, start: str, end: s
     if type_ticker == 'null':
         raise Exception('[ERROR] Type_ticker is not defined')
     
-    url = f'https://iss.moex.com/iss/engines/stock/markets/{type_ticker}/securities/{ticker}/candles.json'
-
-    params = {
-        'interval': interval,
-        'from': start,
-        'till': end
-    }
-    
-    response = requests.get(url, params=params)
-    
-    if response.status_code != 200:
-        raise Exception(f'[ERROR] Status code is {response.status_code}')
-    
-    data = response.json()
-
-    data = data['candles']['data']
-    
-    if len(data) == 0:
-        raise Exception('[ERROR] Information about candles was not found')
-
     candles = []
+    starts = 0
     
-    for i in data:
-        candle = Candle(i[3], i[2], i[0], i[1])
+    while True:
+        url = f'https://iss.moex.com/iss/engines/stock/markets/{type_ticker}/securities/{ticker}/candles.json'
+
+        params = {
+            'interval': interval,
+            'from': start,
+            'till': end,
+            'start': starts
+        }
         
-        candles.append(candle)
+        response = requests.get(url, params=params)
+        
+        if response.status_code != 200:
+            raise Exception(f'[ERROR] Status code is {response.status_code}')
+        
+        data = response.json()
+
+        data = data['candles']['data']
+        
+        if not data:
+            break
+        
+        if len(data) == 0:
+            raise Exception('[ERROR] Information about candles was not found')
+        
+        for i in data:
+            candle = Candle(i[3], i[2], i[0], i[1], i[5], i[7])
+            
+            candles.append(candle)
+            
+        starts += 500
     
     return candles
