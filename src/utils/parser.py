@@ -1,5 +1,5 @@
 import requests
-from models import Candle
+from src.models import Candle
 
 def get_TMI(ticker: str) -> str:
     """ Функция для сопоставления нейминга ценной бумаги с её типом (акция, облигация и тд)
