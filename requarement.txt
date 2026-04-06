@@ -1,3 +1,6 @@
 requests
 pytest
 TA-Lib
+tensorflow
+fastapi
+numpy
