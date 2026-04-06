@@ -83,7 +83,7 @@ def algo_analyze(candles):
             continue
         
         if position[i-1] == 0:
-            # Инициализируем сигнал как 0
+            
             signal[i] = 0
             
             # ПОКУПКА
