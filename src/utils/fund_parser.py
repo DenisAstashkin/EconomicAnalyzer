@@ -110,7 +110,7 @@ try:
     print(f"\nДанные сохранены в {ticker}_fundamental.csv")
 
 except Exception as e:
-    print(f"❌ Ошибка: {e}")
+    print(f"Ошибка: {e}")
     import traceback
     print("\nПолный стек ошибки:")
     traceback.print_exc()
