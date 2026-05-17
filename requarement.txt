@@ -5,6 +5,7 @@ tensorflow
 fastapi
 numpy
 redis
-unicorn
+uvicorn
 xgboost
 pandas
+scikit-learn
