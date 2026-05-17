@@ -40,7 +40,7 @@ def get_TMI(ticker: str) -> str:
     raise Exception('[ERROR] Asset type not found')
     
     
-def get_candles(ticker: str, type_ticker: str, interval: int, start: str, end: str) -> list[Candle]:
+async def get_candles(ticker: str, type_ticker: str, interval: int, start: str, end: str) -> list[Candle]:
     """ Функция для парсинга данных свечевого графика для определённой бумаги
 
     Args:

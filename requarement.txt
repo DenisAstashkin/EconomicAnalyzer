@@ -4,3 +4,7 @@ TA-Lib
 tensorflow
 fastapi
 numpy
+redis
+unicorn
+xgboost
+pandas

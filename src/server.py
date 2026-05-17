@@ -2,10 +2,13 @@ from fastapi import FastAPI
 from src.utils import *
 from src.config import *
 from tensorflow import keras
+from datetime import datetime, timedelta
 import numpy as np
 import talib
 from fastapi.responses import JSONResponse
+import asyncio
 
+#["GAZP", "LKOH", "SBER", "NVTK", "ROSN", "GMKN", "CHMF", "TATN", "VTBR", "EUTR", "YDEX", "PLZL", "SMLT", "OZON", "X5", "MAGN", "ALRS", "RUAL", "AFLT", "MGNT", "VKCO", "NLMK", "MOEX", "T", "MTSS"]
 app = FastAPI()
 model = keras.models.load_model('src/AI_models/invest_ai_model.keras')
 
@@ -23,7 +26,12 @@ def predict_invest(model, d1_raw, w1_raw, mn_raw):
     
     return pred.flatten() * den_d1[1] + mi_d1[1]
 
-def algo_analyze(candles):
+@app.get("/tickets/algo/{ticket}")
+async def algo_analyze(ticket):
+    
+    from_date = (datetime.now() - timedelta(days=150)).strftime("%Y-%m-%d")
+    candles = await get_candles(ticket, TYPE_TO_MARCKET[get_TMI(ticket)], 60, from_date, '')
+    
         # параметры
     BB_PERIOD = 20
     BB_STD = 2.0
@@ -61,7 +69,7 @@ def algo_analyze(candles):
         trend_direction = "UP" if last_price > first_price else "DOWN"
         trend_percent = ((last_price - first_price) / first_price) * 100
 
-    #print(f"\n Общий тренд {ticket} за период: {trend_direction} ({trend_percent:.1f}%)")
+    print(f"\n Общий тренд {ticket} за период: {trend_direction} ({trend_percent:.1f}%)")
 
     # определение сигналов
     signal = np.zeros(n, dtype=int)
@@ -220,19 +228,20 @@ def algo_analyze(candles):
             reason = f"Цена {last_price:.2f} вблизи EMA, RSI {last_rsi:.1f}"
 
     print("\n" + "="*30)
-   # print(f"ВЕРДИКТ ДЛЯ {ticket}: {verdict}")
+    print(f"ВЕРДИКТ ДЛЯ {ticket}: {verdict}")
     print(f"ОБОСНОВАНИЕ: {reason}")
     print("="*30)
-    
-    return verdict, reason
+    print(len(candles))
+    return {"verdict": verdict, "reason": reason}
 
-@app.get("/tickets/{ticket}")
-def tickets(ticket):
+@app.get("/tickets/techAI/{ticket}")
+async def tickets(ticket):
     
-    candles24 = get_candles(ticket, TYPE_TO_MARCKET[get_TMI(ticket)], 24, '2025-01-01', '')
-    candles7 = get_candles(ticket, TYPE_TO_MARCKET[get_TMI(ticket)], 7, '2024-01-01', '')
-    candles31 = get_candles(ticket, TYPE_TO_MARCKET[get_TMI(ticket)], 31, '2023-01-01', '')
-    candles60 = get_candles(ticket, TYPE_TO_MARCKET[get_TMI(ticket)], 60, '2024-01-01', '')
+    candles24, candles7, candles31 = await asyncio.gather(
+        get_candles(ticket, TYPE_TO_MARCKET[get_TMI(ticket)], 24, (datetime.now() - timedelta(days=1000)).strftime("%Y-%m-%d"), ''),
+        get_candles(ticket, TYPE_TO_MARCKET[get_TMI(ticket)], 7, (datetime.now() - timedelta(weeks=624)).strftime("%Y-%m-%d"), ''),
+        get_candles(ticket, TYPE_TO_MARCKET[get_TMI(ticket)], 31, (datetime.now() - timedelta(weeks=1000)).strftime("%Y-%m-%d"), '')
+    )
     
     close24 = np.array([i.close for i in candles24], dtype=np.float64)
     close7 = np.array([i.close for i in candles7], dtype=np.float64)
@@ -277,4 +286,4 @@ def tickets(ticket):
     for i in range(len(candles31) - 28, len(candles31)):
         M.append([candles31[i].open, candles31[i].close, candles31[i].high, candles31[i].low, candles31[i].volume, rsi31[i], bb31['high'][i], bb31['low'][i], ema31[i]])
     
-    return JSONResponse({'candles':  [c.__dict__ for c in candles24[-18:]], 'candles_pred': list(predict_invest(model, np.array(D), np.array(W), np.array(M))), 'verdict': algo_analyze(candles60)[0], 'reason': algo_analyze(candles60)[1]})
+    return JSONResponse({'candles':  [c.__dict__ for c in candles24[-18:]], 'candles_pred': list(predict_invest(model, np.array(D), np.array(W), np.array(M)))})
