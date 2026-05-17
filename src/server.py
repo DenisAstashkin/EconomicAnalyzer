@@ -8,7 +8,7 @@ import talib
 from fastapi.responses import JSONResponse
 import asyncio
 
-#["GAZP", "LKOH", "SBER", "NVTK", "ROSN", "GMKN", "CHMF", "TATN", "VTBR", "EUTR", "YDEX", "PLZL", "SMLT", "OZON", "X5", "MAGN", "ALRS", "RUAL", "AFLT", "MGNT", "VKCO", "NLMK", "MOEX", "T", "MTSS"]
+
 app = FastAPI()
 model = keras.models.load_model('src/AI_models/invest_ai_model.keras')
 
@@ -177,19 +177,6 @@ async def algo_analyze(ticket):
     avg_loss = np.mean([r for r in trade_returns if r < 0]) * 100 if (num_trades - winning_trades) > 0 else 0
     profit_factor = abs(sum([r for r in trade_returns if r > 0]) / sum([r for r in trade_returns if r < 0])) if sum([r for r in trade_returns if r < 0]) != 0 else 0
 
-    print("\n" + "="*50)
-   # print(f"РЕЗУЛЬТАТЫ СТРАТЕГИИ ДЛЯ {ticket}")
-    print(f"Общий тренд: {trend_direction} ({trend_percent:.1f}%)")
-    print(f"Совокупная доходность: {total_return:.2f}%")
-    print(f"Коэффициент Шарпа: {sharpe:.2f}")
-    print(f"Количество сделок: {num_trades}")
-    print(f"Прибыльных сделок: {winning_trades} ({win_rate:.1f}%)")
-    print(f"Средняя доходность сделки: {avg_return:.2f}%")
-    print(f"Средняя прибыль: {avg_win:.2f}%")
-    print(f"Средний убыток: {avg_loss:.2f}%")
-    print(f"Фактор прибыли: {profit_factor:.2f}")
-    print("="*50)
-
     # вердикт
     last_idx = n - 1
     last_price = close[last_idx]
@@ -226,13 +213,11 @@ async def algo_analyze(ticket):
         else:
             verdict = "НАБЛЮДЕНИЕ"
             reason = f"Цена {last_price:.2f} вблизи EMA, RSI {last_rsi:.1f}"
-
-    print("\n" + "="*30)
-    print(f"ВЕРДИКТ ДЛЯ {ticket}: {verdict}")
-    print(f"ОБОСНОВАНИЕ: {reason}")
-    print("="*30)
-    print(len(candles))
-    return {"verdict": verdict, "reason": reason}
+        
+    return {"verdict": verdict, "reason": reason, "strategy_results":[f"Общий тренд: {trend_direction} ({trend_percent:.1f}%)", f"Совокупная доходность: {total_return:.2f}%",
+                                                                      f"Коэффициент Шарпа: {sharpe:.2f}", f"Количество сделок: {num_trades}", f"Прибыльных сделок: {winning_trades} ({win_rate:.1f}%)",
+                                                                      f"Средняя доходность сделки: {avg_return:.2f}%", f"Средняя прибыль: {avg_win:.2f}%", f"Средний убыток: {avg_loss:.2f}%",
+                                                                      f"Фактор прибыли: {profit_factor:.2f}"]}
 
 @app.get("/tickets/techAI/{ticket}")
 async def tickets(ticket):
