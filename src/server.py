@@ -7,10 +7,13 @@ import numpy as np
 import talib
 from fastapi.responses import JSONResponse
 import asyncio
+import xgboost as xgb
 
 
 app = FastAPI()
-model = keras.models.load_model('src/AI_models/invest_ai_model.keras')
+model_fund = xgb.XGBClassifier()
+model_fund.load_model('src/AI_models/fundamental_model.json')
+model_tech = keras.models.load_model('src/AI_models/invest_ai_model.keras')
 
 def predict_invest(model, d1_raw, w1_raw, mn_raw):
     def scale(win):
@@ -271,4 +274,53 @@ async def tickets(ticket):
     for i in range(len(candles31) - 28, len(candles31)):
         M.append([candles31[i].open, candles31[i].close, candles31[i].high, candles31[i].low, candles31[i].volume, rsi31[i], bb31['high'][i], bb31['low'][i], ema31[i]])
     
-    return JSONResponse({'candles':  [c.__dict__ for c in candles24[-18:]], 'candles_pred': list(predict_invest(model, np.array(D), np.array(W), np.array(M)))})
+    return JSONResponse({'candles':  [c.__dict__ for c in candles24[-18:]], 'candles_pred': list(predict_invest(model_tech, np.array(D), np.array(W), np.array(M)))})
+
+
+@app.get("/tickets/fund/{ticket}")
+def fund(ticket):
+    print(f"\n--- Обработка {ticket} ---")
+    current_year = datetime.now().year - 1
+    
+    df_raw = parse_ticker_data(ticket)
+    if df_raw is None or df_raw.empty:
+        return {"error": "Не удалось получить данные для {ticket}"}
+    
+    df_T = df_raw.T
+    
+    df_T.index = [int(str(idx).split('.')[0].strip()) for idx in df_T.index]
+    df_T = df_T.sort_index()
+    
+    if current_year in df_T.index:
+        row = df_T.loc[current_year]
+        used_year = current_year
+    else:
+        used_year = df_T.index[-1]
+        row = df_T.loc[used_year]
+    
+    feature_dict = row.to_dict()
+    expected_features = model_fund.get_booster().feature_names
+    
+    missing_cols = set(expected_features) - set(feature_dict.keys())
+    extra_cols = set(feature_dict.keys()) - set(expected_features)
+    
+    if missing_cols:
+        for col in missing_cols:
+            feature_dict[col] = np.nan
+    
+    X_pred = pd.DataFrame([feature_dict])[expected_features]
+    
+    proba = model_fund.predict_proba(X_pred)[0]
+    
+    prob_down, prob_side, prob_up = proba
+    THRESHOLD_BUY = 0.45
+    signal = "ПОКУПАТЬ" if prob_up > THRESHOLD_BUY else "НЕ покупать"
+    
+    return{
+        "Ticker": ticket,
+        "Year": used_year,
+        "Prob_Down": float(prob_down),
+        "Prob_Side": float(prob_side),
+        "Prob_Up": float(prob_up),
+        "Signal": signal
+    }
