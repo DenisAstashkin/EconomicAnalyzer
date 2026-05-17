@@ -72,8 +72,6 @@ async def algo_analyze(ticket):
         trend_direction = "UP" if last_price > first_price else "DOWN"
         trend_percent = ((last_price - first_price) / first_price) * 100
 
-    print(f"\n Общий тренд {ticket} за период: {trend_direction} ({trend_percent:.1f}%)")
-
     # определение сигналов
     signal = np.zeros(n, dtype=int)
     position = np.zeros(n, dtype=int)
@@ -279,7 +277,6 @@ async def tickets(ticket):
 
 @app.get("/tickets/fund/{ticket}")
 def fund(ticket):
-    print(f"\n--- Обработка {ticket} ---")
     current_year = datetime.now().year - 1
     
     df_raw = parse_ticker_data(ticket)
@@ -302,25 +299,28 @@ def fund(ticket):
     expected_features = model_fund.get_booster().feature_names
     
     missing_cols = set(expected_features) - set(feature_dict.keys())
-    extra_cols = set(feature_dict.keys()) - set(expected_features)
     
     if missing_cols:
         for col in missing_cols:
-            feature_dict[col] = np.nan
+            feature_dict[col] = 0.0
     
     X_pred = pd.DataFrame([feature_dict])[expected_features]
-    
     proba = model_fund.predict_proba(X_pred)[0]
     
     prob_down, prob_side, prob_up = proba
     THRESHOLD_BUY = 0.45
-    signal = "ПОКУПАТЬ" if prob_up > THRESHOLD_BUY else "НЕ покупать"
+    signal = "ПОКУПАТЬ" if prob_up >= THRESHOLD_BUY else "НЕ покупать"
+    prob = prob_up if prob_up >= THRESHOLD_BUY else prob_down
     
     return{
+        "EPS":X_pred['EPS, руб'].item(),
+        "P/E": X_pred['P/E'].item(),
+        "Капитал":X_pred['Капитал, млрд руб'].item(),
+        "Чистая прибыль":X_pred['Чистая прибыль, млрд руб'].item(),
+        "Расх на персонал":X_pred['Расх на персонал, млрд руб'].item(),
+        "P/B": X_pred['P/B'].item(),
         "Ticker": ticket,
         "Year": used_year,
-        "Prob_Down": float(prob_down),
-        "Prob_Side": float(prob_side),
-        "Prob_Up": float(prob_up),
+        "prob": float(prob),
         "Signal": signal
     }
