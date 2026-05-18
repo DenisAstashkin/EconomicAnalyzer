@@ -1,7 +1,7 @@
 import requests
 import pandas as pd
 import re
-from io import StringIO
+from bs4 import BeautifulSoup
 
 headers = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
@@ -19,61 +19,96 @@ def clean_number(value):
 
 def parse_ticker_data(ticker):
     url = f"https://smart-lab.ru/q/{ticker}/f/y/"
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+    }
+
     try:
         response = requests.get(url, headers=headers, timeout=15)
         response.raise_for_status()
-        tables = pd.read_html(
-            StringIO(response.text), match="Выручка|Чистая прибыль"
-        )
-        raw_df = max(tables, key=len).copy()
-
-        header_row_idx = None
-        for i, row in raw_df.iterrows():
-            years_detected = [
-                str(cell).strip()
-                for cell in row
-                if re.match(r"^20\d{2}$", str(cell).strip())
-            ]
-            if len(years_detected) >= 2:
-                header_row_idx = i
-                break
-        if header_row_idx is None:
-            return None
-
-        data_section = raw_df.iloc[header_row_idx:].copy()
-        headers_raw = [str(c).strip() for c in data_section.iloc[0].tolist()]
-
-        years = []
-        year_col_indices = []
-        for idx, cell in enumerate(headers_raw):
-            year_match = re.search(r"(20\d{2})", cell)
-            if year_match:
-                years.append(int(year_match.group(1)))
-                year_col_indices.append(idx)
-
-        result_data = {}
-        for idx in range(1, len(data_section)):
-            row = data_section.iloc[idx]
-            indicator = str(row.iloc[0]).strip()
-            if indicator == "nan" or indicator == "":
-                continue
-            if any(
-                trash in indicator.lower()
-                for trash in [
-                    "smart-lab",
-                    "дата отчета",
-                    "валюта",
-                    "финансовый отчет",
-                ]
-            ):
-                continue
-            values = []
-            for col_idx in year_col_indices:
-                val = row.iloc[col_idx]
-                values.append(clean_number(val))
-            result_data[indicator] = values
-
-        df = pd.DataFrame.from_dict(result_data, orient="index", columns=years)
-        return df.dropna(how="all").sort_index()
-    except:
+    except Exception as e:
+        print(f"[ОШИБКА] Запрос не удался: {e}")
         return None
+
+    soup = BeautifulSoup(response.text, 'html.parser')
+
+    # Ищем блок с финансовыми данными (div class='data')
+    data_div = soup.find('div', class_='data')
+    if not data_div:
+        print("[ОШИБКА] Не найден div class='data'")
+        return None
+
+    years = []
+    raw_rows = []  # [название_показателя, значение_2021, значение_2022, ...]
+
+    # Все блоки показателей (div class='item')
+    items = data_div.find_all('div', class_='item')
+    if not items:
+        print("[ОШИБКА] Нет div с классом 'item'")
+        return None
+
+    for item in items:
+        # Название показателя (span class='ru')
+        name_span = item.find('span', class_='ru')
+        if not name_span:
+            continue
+        metric_name = name_span.get_text(strip=True)
+
+        # Блоки с данными за каждый год (div class='d2')
+        data_blocks = item.find_all('div', class_='d2')
+        if not data_blocks:
+            continue
+
+        row_values = []
+        # Если года ещё не собраны – берём из первого показателя
+        if not years:
+            for block in data_blocks:
+                year_span = block.find('span', class_='y')
+                if year_span:
+                    year_text = year_span.get_text(strip=True)
+                    if year_text and re.match(r'^\d{4}$', year_text):
+                        years.append(year_text)
+
+        # Числовое значение показателя (span class='n')
+        for block in data_blocks:
+            val_span = block.find('span', class_='n')
+            val_text = val_span.get_text(strip=True) if val_span else ''
+            row_values.append(val_text)
+
+        raw_rows.append([metric_name] + row_values)
+
+    if not years:
+        print("[ОШИБКА] Годы не найдены")
+        return None
+
+    # Формируем DataFrame
+    columns = ['Показатель'] + years
+    df = pd.DataFrame(raw_rows, columns=columns)
+
+    # Очищаем числовые колонки: убираем пробелы, заменяем запятую на точку
+    for col in years:
+        df[col] = df[col].astype(str).str.replace(' ', '').str.replace(',', '.')
+        df[col] = df[col].apply(
+            lambda x: float(x) if re.match(r'^-?\d+(\.\d+)?$', x) else pd.NA
+        )
+
+    # Транспонируем: строки – года, колонки – показатели
+    df = df.set_index('Показатель').T
+    df.index.name = 'Год'
+    df.index = df.index.astype(int)
+    df = df.sort_index()
+
+    # (Опционально) Переименовываем колонки в английские названия
+    rename_map = {
+        'Чистый проц. доход': 'Net_interest_income',
+        'Чистый комисс. доход': 'Net_fee_income',
+        'Чистая прибыль': 'Net_profit',
+        'Капитал': 'Capital',
+        'Число клиентов': 'Number_of_clients',
+        'EPS, руб': 'EPS',
+        'P/E': 'PE',
+        'P/B': 'PB'
+    }
+    df = df.rename(columns=rename_map)
+
+    return df

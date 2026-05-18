@@ -9,3 +9,6 @@ uvicorn
 xgboost
 pandas
 scikit-learn
+transformers
+torch
+bs4
