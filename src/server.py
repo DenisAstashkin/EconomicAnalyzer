@@ -411,8 +411,22 @@ def news_sentiment(ticket):
     news_text = get_latest_news(ticket.upper())
     score, tickers = predict_news(news_text)
 
-    res = f"{score:.3f}"
-    response = {"res": res, 'cached' : False}
+    # Пороги для принятия решения
+    BUY_THRESHOLD = 0.2      # сильный позитив → покупка
+    SELL_THRESHOLD = -0.2    # сильный негатив → продажа
+
+    if score > BUY_THRESHOLD:
+        action = "ПОКУПАТЬ"
+    elif score < SELL_THRESHOLD:
+        action = "ПРОДАВАТЬ"
+    else:
+        action = "ДЕРЖАТЬ"
+
+    response = {
+        "action": action,          # конкретный призыв к действию
+        "score": round(score, 4),  # исходная оценка (для отладки)
+        "cached": False
+    }
 
     client.setex(cache_key, REDIS_TTL_SECONDS, json.dumps(response, ensure_ascii=False))
     print(f"[REDIS] SET: {cache_key} (TTL={REDIS_TTL_SECONDS}s)")
