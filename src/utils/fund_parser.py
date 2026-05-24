@@ -8,107 +8,149 @@ headers = {
 }
 
 def clean_number(value):
-    """Очистка числового значения"""
-    if pd.isna(value) or value == '':
+    if value is None or value == '' or value == '—':
         return None
-    cleaned = str(value).replace(' ', '').replace(',', '.').replace('%', '').replace('?', '')
+    s = str(value).strip()
+    # Удаляем возможные единицы измерения и лишние символы (не цифры, не запятая/точка/минус)
+    s = re.sub(r'[^\d,.\-]', '', s)
+    # Меняем запятую на точку, только если в числе нет точки (иначе запятая — разделитель тысяч)
+    if '.' not in s and ',' in s:
+        s = s.replace(',', '.')
+    else:
+        s = s.replace(',', '')
+    s = s.replace(' ', '')
     try:
-        return float(cleaned)
+        return float(s)
     except (ValueError, TypeError):
         return None
 
 def parse_ticker_data(ticker):
     url = f"https://smart-lab.ru/q/{ticker}/f/y/"
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+    try:
+        resp = requests.get(url, headers=headers, timeout=15)
+        resp.raise_for_status()
+    except Exception:
+        return None
+
+    soup = BeautifulSoup(resp.text, 'html.parser')
+    tables = soup.find_all('table')
+    if not tables:
+        return None
+
+    # Сопоставление синонимов с целевыми названиями признаков модели
+    FEATURE_ALIASES = {
+        'EPS, руб': [
+            'eps, руб', 'eps', 'прибыль на акцию, руб', 'eps (руб.)',
+            'прибыль на 1 акцию, руб'
+        ],
+        'P/E': [
+            'p/e', 'p/e (капитализация/прибыль)', 'капитализация/прибыль',
+            'p/e ratio'
+        ],
+        'Капитал, млрд руб': [
+            'капитализация, млрд руб', 'капитализация', 'капитал, млрд руб',
+            'рыночная капитализация, млрд руб', 'market cap, млрд руб'
+        ],
+        'Чистая прибыль, млрд руб': [
+            'чистая прибыль, млрд руб', 'чистая прибыль (млрд руб.)',
+            'чистая прибыль', 'чистая прибыль, млрд руб.'
+        ],
+        'Расх на персонал, млрд руб': [
+            'расходы на персонал, млрд руб', 'расх на персонал, млрд руб',
+            'расходы на персонал', 'затраты на персонал, млрд руб'
+        ],
+        'P/B': [
+            'p/b', 'p/b (капитализация/балансовая стоимость)',
+            'капитализация/балансовая стоимость', 'p/b ratio'
+        ]
     }
 
-    try:
-        response = requests.get(url, headers=headers, timeout=15)
-        response.raise_for_status()
-    except Exception as e:
-        print(f"[ОШИБКА] Запрос не удался: {e}")
-        return None
+    all_data = {}   # {целевое_название: {год: значение}}
 
-    soup = BeautifulSoup(response.text, 'html.parser')
-
-    # Ищем блок с финансовыми данными (div class='data')
-    data_div = soup.find('div', class_='data')
-    if not data_div:
-        print("[ОШИБКА] Не найден div class='data'")
-        return None
-
-    years = []
-    raw_rows = []  # [название_показателя, значение_2021, значение_2022, ...]
-
-    # Все блоки показателей (div class='item')
-    items = data_div.find_all('div', class_='item')
-    if not items:
-        print("[ОШИБКА] Нет div с классом 'item'")
-        return None
-
-    for item in items:
-        # Название показателя (span class='ru')
-        name_span = item.find('span', class_='ru')
-        if not name_span:
-            continue
-        metric_name = name_span.get_text(strip=True)
-
-        # Блоки с данными за каждый год (div class='d2')
-        data_blocks = item.find_all('div', class_='d2')
-        if not data_blocks:
+    # Перебираем все таблицы на странице
+    for table in tables:
+        rows = table.find_all('tr')
+        if len(rows) < 2:
             continue
 
-        row_values = []
-        # Если года ещё не собраны – берём из первого показателя
-        if not years:
-            for block in data_blocks:
-                year_span = block.find('span', class_='y')
-                if year_span:
-                    year_text = year_span.get_text(strip=True)
-                    if year_text and re.match(r'^\d{4}$', year_text):
-                        years.append(year_text)
+        # Ищем строку заголовка с годами (>=2 года вида 20XX)
+        header_idx = None
+        years = []
+        col_idx_of_year = []
 
-        # Числовое значение показателя (span class='n')
-        for block in data_blocks:
-            val_span = block.find('span', class_='n')
-            val_text = val_span.get_text(strip=True) if val_span else ''
-            row_values.append(val_text)
+        for i, row in enumerate(rows):
+            cells = row.find_all(['th', 'td'])
+            years_in_row = []
+            for j, cell in enumerate(cells):
+                text = cell.get_text(strip=True)
+                m = re.match(r'^(20\d{2})$', text)
+                if m:
+                    years_in_row.append((j, int(m.group(1))))
+            if len(years_in_row) >= 2:
+                header_idx = i
+                col_idx_of_year = [j for j, _ in years_in_row]
+                years = [y for _, y in years_in_row]
+                break
 
-        raw_rows.append([metric_name] + row_values)
+        if header_idx is None:
+            continue   # в этой таблице нет нужного формата годов
 
-    if not years:
-        print("[ОШИБКА] Годы не найдены")
+        # Обрабатываем строки данных (всё, что после заголовка)
+        for row in rows[header_idx + 1:]:
+            cells = row.find_all(['th', 'td'])
+            if not cells:
+                continue
+
+            raw_name = cells[0].get_text(strip=True)
+            if not raw_name or raw_name.lower() in ('показатель', 'наименование', ''):
+                continue
+
+            # Извлекаем значения по найденным годам
+            values_by_year = {}
+            for col_j, year in zip(col_idx_of_year, years):
+                if col_j >= len(cells):
+                    continue
+                val = clean_number(cells[col_j].get_text(strip=True))
+                if val is not None:
+                    values_by_year[year] = val
+
+            if not values_by_year:
+                continue
+
+            # Сопоставляем название показателя с целевыми именами
+            name_lower = raw_name.lower().strip()
+            matched_target = None
+            for target, aliases in FEATURE_ALIASES.items():
+                for alias in aliases:
+                    if alias in name_lower:
+                        matched_target = target
+                        break
+                if matched_target:
+                    break
+
+            if matched_target is None:
+                continue
+
+            # Сохраняем данные (при дубликатах оставляем первое найденное значение для года)
+            if matched_target not in all_data:
+                all_data[matched_target] = {}
+            for y, v in values_by_year.items():
+                if y not in all_data[matched_target] or all_data[matched_target][y] is None:
+                    all_data[matched_target][y] = v
+
+    if not all_data:
         return None
+
+    # Собираем множество всех годов
+    all_years = sorted({y for d in all_data.values() for y in d})
 
     # Формируем DataFrame
-    columns = ['Показатель'] + years
-    df = pd.DataFrame(raw_rows, columns=columns)
+    data_for_df = {}
+    for target in FEATURE_ALIASES:
+        if target in all_data:
+            row = [all_data[target].get(y, None) for y in all_years]
+            data_for_df[target] = row
 
-    # Очищаем числовые колонки: убираем пробелы, заменяем запятую на точку
-    for col in years:
-        df[col] = df[col].astype(str).str.replace(' ', '').str.replace(',', '.')
-        df[col] = df[col].apply(
-            lambda x: float(x) if re.match(r'^-?\d+(\.\d+)?$', x) else pd.NA
-        )
-
-    # Транспонируем: строки – года, колонки – показатели
-    df = df.set_index('Показатель').T
-    df.index.name = 'Год'
-    df.index = df.index.astype(int)
-    df = df.sort_index()
-
-    # (Опционально) Переименовываем колонки в английские названия
-    rename_map = {
-        'Чистый проц. доход': 'Net_interest_income',
-        'Чистый комисс. доход': 'Net_fee_income',
-        'Чистая прибыль': 'Net_profit',
-        'Капитал': 'Capital',
-        'Число клиентов': 'Number_of_clients',
-        'EPS, руб': 'EPS',
-        'P/E': 'PE',
-        'P/B': 'PB'
-    }
-    df = df.rename(columns=rename_map)
-
-    return df
+    df = pd.DataFrame.from_dict(data_for_df, orient='index', columns=all_years)
+    df = df.dropna(how='all').sort_index()
+    return df if not df.empty else None
