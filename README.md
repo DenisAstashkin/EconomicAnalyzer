@@ -56,17 +56,12 @@ cd EconomicAnalyzer
 ### Шаг 2.2. Создание и активация виртуального окружения
 Изолируйте зависимости проекта от глобальной системы, выбрав блок команд под вашу ОС:
 
-<<<<<<< HEAD
+
 * **Для Windows (cmd/PowerShell):**
   ```bash
   python.exe -m venv .venv
   .venv\Scripts\activate
-=======
-* **Для Windows (Командная строка / CMD):**
-  ```cmd
-  py -3.11 -m venv .venv
-  .venv\Scripts\activate.bat
->>>>>>> d100431 (Update readme)
+
   ```
 * **Для Windows (PowerShell):**
   ```powershell
@@ -87,15 +82,8 @@ cd EconomicAnalyzer
 python -m pip install --upgrade pip
 pip install -r requarement.txt
 ```
-<<<<<<< HEAD
-Для Windows
-```bash
-python -m pip install --upgrade pip
-pip install -r requarement.txt
-```
-=======
+
 > ⚠️ **Примечание для Windows:** Если ваш процессор старый и не поддерживает инструкции AVX2, библиотека `tensorflow` может вызвать ошибку при запуске. В таком случае замените строку `tensorflow` в файле `requarement.txt` на `tensorflow-cpu`.
->>>>>>> d100431 (Update readme)
 
 ### Шаг 2.4. Запуск сервера разработки
 Запустите Uvicorn с флагом автоматического перезапуска при изменении кода (`--reload`):
@@ -103,10 +91,7 @@ pip install -r requarement.txt
 python -m uvicorn src.server:app --reload
 ```
 
-<<<<<<< HEAD
 Приложение успешно запущено и доступно по адресу: **[http://127.0.0.1:8000](http://127.0.0.1:8000)**
 
 ---
-=======
-Приложение успешно запущено и доступно по адресу: **[http://127.0.0.1:8000](http://127.0.0.1:8000)**  
->>>>>>> d100431 (Update readme)
+
