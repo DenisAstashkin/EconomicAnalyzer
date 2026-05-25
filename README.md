@@ -44,8 +44,8 @@ cd EconomicAnalyzer
 
 * **Для Windows (cmd/PowerShell):**
   ```bash
-  py -3.11 -m venv .venv
-  .venv\Scripts\activate.bat
+  python.exe -m venv .venv
+  .venv\Scripts\activate
   ```
 * **Для macOS / Linux:**
   ```bash
@@ -57,6 +57,11 @@ cd EconomicAnalyzer
 Обновите пакетный менеджер и установите все необходимые зависимости:
 ```bash
 pip install --upgrade pip
+pip install -r requarement.txt
+```
+Для Windows
+```bash
+python -m pip install --upgrade pip
 pip install -r requarement.txt
 ```
 
